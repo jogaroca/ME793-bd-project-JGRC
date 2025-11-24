@@ -5,6 +5,8 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import matplotlib.cm as cm
+from matplotlib.colors import Normalize
 
 # Global list of state names (used in plotting functions)
 state_names = ["Z", "S1", "S2", "S3", "N", "W"]
@@ -59,6 +61,51 @@ def plot_diag_Finv_comparison(results_dict):
     # fig.savefig("bd_observability_barplot.png", dpi=300, bbox_inches="tight")
 
 
+def plot_motifs_color_coded(tsim, motif_traces, scores, score_label="full state"):
+    """Plot control motifs colored by an observability score.
+
+    Parameters
+    ----------
+    tsim : np.ndarray
+        Time vector.
+    motif_traces : dict[str, np.ndarray]
+        Dict {motif_name: u_D(t) array}.
+    scores : dict[str, float]
+        Dict {motif_name: scalar observability score}
+        (smaller should mean better observability).
+    score_label : str
+        Label for the colorbar (e.g. 'full state' or 'state W').
+    """
+    names = list(motif_traces.keys())
+    vals = np.array([scores[name] for name in names])
+
+    vmin, vmax = vals.min(), vals.max()
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    cmap = cm.get_cmap("viridis")
+    sm = cm.ScalarMappable(norm=norm, cmap=cmap)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    for name in names:
+        score = scores[name]
+        color = cmap(norm(score))
+        ax.plot(tsim, motif_traces[name], label=f"{name}", color=color, linewidth=2)
+
+    ax.set_xlabel("time [h]")
+    ax.set_ylabel("u_D [1/h]")
+    ax.set_title(f"Control motifs colored by observability ({score_label})")
+    ax.grid(True)
+
+    cbar = fig.colorbar(sm, ax=ax)
+    cbar.set_label(f"log10(min error variance) ({score_label})")
+
+    fig.tight_layout()
+    plt.show()
+
+    # If you want to save this figure for the report, uncomment:
+    # fig.savefig(f"bd_motifs_color_{score_label.replace(' ', '_')}.png",
+    #             dpi=300, bbox_inches="tight")
+
+
 def main():
     # ------------------------------------------------------------------
     # Make sure we can import the local bd package from src/
@@ -107,7 +154,7 @@ def main():
     plt.grid(True)
     plt.tight_layout()
     plt.show()
-    # Si quieres guardar esta figura para el reporte:
+    # To save this figure for the report:
     # plt.savefig("bd_motifs.png", dpi=300, bbox_inches="tight")
 
     # ------------------------------------------------------------------
@@ -177,6 +224,45 @@ def main():
         print(f"  max eigenvalue(W_o) = {eigvals.max():.3e}")
 
     # ------------------------------------------------------------------
+    # Figure: trajectory motifs color coded with observability level
+    # (full state)
+    # ------------------------------------------------------------------
+    motif_traces = {
+        "const_0.12": u_const,
+        "step_24h": u_step,
+        "sin_12h": u_sin,
+    }
+
+    # Observability score for FULL state: average log10(diag(Finv))
+    full_state_scores = {}
+    for name, (_, Finv) in results.items():
+        diag_vals = np.diag(Finv)
+        full_state_scores[name] = np.mean(np.log10(diag_vals))
+
+    plot_motifs_color_coded(
+        tsim,
+        motif_traces,
+        full_state_scores,
+        score_label="full state",
+    )
+
+    # OPTIONAL: motifs color-coded by observability of an important state (e.g. W)
+    important_state = "W"
+    idx_W = state_names.index(important_state)
+
+    W_state_scores = {}
+    for name, (_, Finv) in results.items():
+        diag_vals = np.diag(Finv)
+        W_state_scores[name] = np.log10(diag_vals[idx_W])
+
+    plot_motifs_color_coded(
+        tsim,
+        motif_traces,
+        W_state_scores,
+        score_label=f"state {important_state}",
+    )
+
+    # ------------------------------------------------------------------
     # Plots: heatmaps and bar comparison
     # ------------------------------------------------------------------
     for name, (W_o, Finv) in results.items():
@@ -210,53 +296,6 @@ def main():
 
     # Optional: save summary to CSV for later use in the report
     # summary_df_pivot.to_csv("bd_observability_summary.csv")
-    # ------------------------------------------------------------------
-    # OPTIONAL: measurement-subset analysis (for project write-up)
-    # ------------------------------------------------------------------
-    measurement_subsets = {
-        "B":      [0],
-        "N":      [1],
-        "W":      [2],
-        "B+N":    [0, 1],
-        "B+W":    [0, 2],
-        "N+W":    [1, 2],
-        "B+N+W":  [0, 1, 2],
-    }
-
-    subset_rows = []
-    for subset_name, meas_idx in measurement_subsets.items():
-        for motif_name, ufun in motifs.items():
-            W_o_sub, Finv_sub, _ = bd.empirical_observability_gramian(
-                u_func=ufun,
-                x0=x0,
-                tsim=tsim,
-                eps=eps,
-                lam=lam,
-                meas_indices=meas_idx,
-            )
-            diag_vals = np.diag(Finv_sub)
-            for s_idx, s_name in enumerate(state_names):
-                subset_rows.append(
-                    dict(
-                        subset=subset_name,
-                        motif=motif_name,
-                        state=s_name,
-                        Finv_diag=diag_vals[s_idx],
-                        log10_Finv_diag=np.log10(diag_vals[s_idx]),
-                    )
-                )
-
-    subset_df = pd.DataFrame(subset_rows)
-    print("\nMeasurement-subset observability summary (log10 diag(Finv)):")
-    print(subset_df.head())
-    # You can pivot this to inspect specific states or subsets, e.g.:
-    # subset_pivot = subset_df.pivot_table(
-    #     index=["state"],
-    #     columns=["subset", "motif"],
-    #     values="log10_Finv_diag",
-    # )
-    # print(subset_pivot)
-
 
 
 if __name__ == "__main__":
