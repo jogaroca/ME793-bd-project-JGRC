@@ -68,6 +68,7 @@ def empirical_observability_gramian(
     eps: float = 1e-3,
     lam: float = 1e-6,
     params: dict | None = None,
+    meas_indices: list[int] | None = None,
 ):
     """Compute the empirical observability Gramian for a given input motif.
 
@@ -89,6 +90,9 @@ def empirical_observability_gramian(
         Tikhonov regularization parameter for the inverse of the Gramian.
     params : dict, optional
         Parameter dictionary. If None, uses :data:`bd.dynamics.theta`.
+    meas_indices : list[int] or None, optional
+        Indices of the measurement components to use in the Gramian
+        (0 -> B, 1 -> N, 2 -> W). If None, all measurements are used.
 
     Returns
     -------
@@ -105,12 +109,20 @@ def empirical_observability_gramian(
     tsim = np.asarray(tsim, dtype=float)
     x0 = np.asarray(x0, dtype=float)
 
-    # 1) Nominal simulation
-    t_sim, X_nom, U_nom, Y_nom = simulate_bd(u_func, x0, tsim, params=params, return_arrays=True)
+    # 1) Nominal simulation (used mainly to determine dimensions)
+    _, X_nom, _, Y_nom = simulate_bd(
+        u_func, x0, tsim, params=params, return_arrays=True
+    )
     n_steps, n_states = X_nom.shape
-    n_meas = Y_nom.shape[1]
 
-    # 2) Build sensitivity matrix O
+    if meas_indices is None:
+        meas_indices = list(range(Y_nom.shape[1]))
+    else:
+        meas_indices = list(meas_indices)
+
+    n_meas = len(meas_indices)
+
+    # 2) Build sensitivity matrix O using only selected measurements
     O_cols = []
     for i in range(n_states):
         e = np.zeros(n_states)
@@ -119,10 +131,17 @@ def empirical_observability_gramian(
         x0_plus = x0 + e
         x0_minus = x0 - e
 
-        _, _, _, Y_plus = simulate_bd(u_func, x0_plus, tsim, params=params, return_arrays=True)
-        _, _, _, Y_minus = simulate_bd(u_func, x0_minus, tsim, params=params, return_arrays=True)
+        _, _, _, Y_plus = simulate_bd(
+            u_func, x0_plus, tsim, params=params, return_arrays=True
+        )
+        _, _, _, Y_minus = simulate_bd(
+            u_func, x0_minus, tsim, params=params, return_arrays=True
+        )
 
-        dY = (Y_plus - Y_minus).ravel()  # shape (n_steps * n_meas,)
+        Y_plus_sel = Y_plus[:, meas_indices]
+        Y_minus_sel = Y_minus[:, meas_indices]
+
+        dY = (Y_plus_sel - Y_minus_sel).ravel()  # (n_steps * n_meas,)
         O_cols.append(dY)
 
     O = np.stack(O_cols, axis=1)  # (n_steps * n_meas, n_states)
@@ -132,3 +151,4 @@ def empirical_observability_gramian(
     Finv = np.linalg.inv(W_o + lam * np.eye(n_states))
 
     return W_o, Finv, O
+
