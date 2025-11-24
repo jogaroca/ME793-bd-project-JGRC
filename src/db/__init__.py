@@ -2,17 +2,26 @@
 Bd chemostat model package for the ME793 nonlinear estimation project.
 
 This package bundles the continuous-time dynamics, measurement model,
-control-input motifs and simulation utilities for the Bd chemostat
-(example system used in the project).
+control-input motifs, simulation utilities and empirical observability
+tools for the Bd chemostat example system.
 
 Typical usage in a notebook::
 
-    from bd import model, controls, measurements, simulator
+    from bd import (
+        model, controls, measurements, simulator, observability
+    )
 
+    # Simulate
     x0 = model.default_initial_state()
     t, X, U, Y = simulator.simulate_bd_odeint(
         x0=x0,
         uD_fun=controls.uD_const_012,
+    )
+
+    # Build pybounds simulator and empirical observability matrices
+    pb_sim = simulator.make_pybounds_simulator(dt=t[1] - t[0])
+    SEOM, O_sliding = observability.build_sliding_empirical_observability_matrix(
+        pb_sim, t, X, U, window_size=6
     )
 """
 
@@ -38,6 +47,12 @@ from .simulator import (
     default_time_grid,
     simulate_bd_odeint,
     make_pybounds_simulator,
+)
+from .observability import (
+    estimate_measurement_noise_variances_from_outputs,
+    build_sliding_empirical_observability_matrix,
+    build_single_window_fisher,
+    build_sliding_fisher_observability,
 )
 
 __all__ = [
@@ -66,4 +81,9 @@ __all__ = [
     "default_time_grid",
     "simulate_bd_odeint",
     "make_pybounds_simulator",
+    # observability
+    "estimate_measurement_noise_variances_from_outputs",
+    "build_sliding_empirical_observability_matrix",
+    "build_single_window_fisher",
+    "build_sliding_fisher_observability",
 ]
