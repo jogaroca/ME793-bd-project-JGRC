@@ -210,6 +210,53 @@ def main():
 
     # Optional: save summary to CSV for later use in the report
     # summary_df_pivot.to_csv("bd_observability_summary.csv")
+    # ------------------------------------------------------------------
+    # OPTIONAL: measurement-subset analysis (for project write-up)
+    # ------------------------------------------------------------------
+    measurement_subsets = {
+        "B":      [0],
+        "N":      [1],
+        "W":      [2],
+        "B+N":    [0, 1],
+        "B+W":    [0, 2],
+        "N+W":    [1, 2],
+        "B+N+W":  [0, 1, 2],
+    }
+
+    subset_rows = []
+    for subset_name, meas_idx in measurement_subsets.items():
+        for motif_name, ufun in motifs.items():
+            W_o_sub, Finv_sub, _ = bd.empirical_observability_gramian(
+                u_func=ufun,
+                x0=x0,
+                tsim=tsim,
+                eps=eps,
+                lam=lam,
+                meas_indices=meas_idx,
+            )
+            diag_vals = np.diag(Finv_sub)
+            for s_idx, s_name in enumerate(state_names):
+                subset_rows.append(
+                    dict(
+                        subset=subset_name,
+                        motif=motif_name,
+                        state=s_name,
+                        Finv_diag=diag_vals[s_idx],
+                        log10_Finv_diag=np.log10(diag_vals[s_idx]),
+                    )
+                )
+
+    subset_df = pd.DataFrame(subset_rows)
+    print("\nMeasurement-subset observability summary (log10 diag(Finv)):")
+    print(subset_df.head())
+    # You can pivot this to inspect specific states or subsets, e.g.:
+    # subset_pivot = subset_df.pivot_table(
+    #     index=["state"],
+    #     columns=["subset", "motif"],
+    #     values="log10_Finv_diag",
+    # )
+    # print(subset_pivot)
+
 
 
 if __name__ == "__main__":
