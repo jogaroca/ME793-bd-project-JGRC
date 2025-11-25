@@ -1,11 +1,10 @@
 # Utility/bd_chemostat.py
 
-from typing import Optional, Sequence, Callable
-
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Callable
 import numpy as np
 from scipy.integrate import odeint
+
 
 # -------------------------------------------------------------------
 # Parámetros del modelo Bd (tal como en el PDF de la fase 2)
