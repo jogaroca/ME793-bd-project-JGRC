@@ -196,25 +196,30 @@ def simulate_bd(
     y_sim : ndarray, shape (T, n_outputs)
     """
     if x0 is None:
+        # Default initial condition
         x0 = np.array([1.0, 0.2, 0.2, 0.2, 5.0, 0.0], dtype=float)
     else:
         x0 = np.asarray(x0, dtype=float).reshape(6,)
 
+    # Time grid
     t_sim = np.arange(0.0, tsim_length + dt, dt)
 
+    # Helper to get D(t)
     def D_of_t(t: float) -> float:
         if D_fun is None:
             return float(D)
         return float(D_fun(float(t)))
 
-    # input trajectory for bookkeeping / plotting
+    # Input trajectory (for bookkeeping / plotting)
     D_vals = np.array([D_of_t(t) for t in t_sim], dtype=float)
     u_sim = D_vals.reshape(-1, 1)
 
+    # ODE RHS
     def rhs(x, t):
         D_t = D_of_t(t)
         return f(x, [D_t])
 
+    # Integrate
     x_sim = odeint(rhs, x0, t_sim)
 
     # Build outputs
@@ -225,3 +230,4 @@ def simulate_bd(
     y_sim = np.vstack(y_list)
 
     return t_sim, x_sim, u_sim, y_sim
+
