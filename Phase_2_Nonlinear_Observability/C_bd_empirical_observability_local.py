@@ -1,15 +1,16 @@
 # Phase_2_Nonlinear_Observability/C_bd_empirical_observability_local.py
 
 """
-Local empirical observability index along the Bd chemostat trajectory.
+Local empirical observability index along Bd chemostat trajectories.
 
 This script:
-    - Simulates the Bd model for a fixed initial condition and a chosen
-      trajectory motif u_D(t)
-    - Computes the local empirical observability Gramian W_k at each time step
-      from finite-difference sensitivities dy(t_k)/dx0
+    - Simulates the Bd model for a fixed initial condition and several
+      trajectory motifs u_D(t)
+    - For each motif, computes the local empirical observability Gramian W_k
+      at each time step from finite-difference sensitivities dy(t_k)/dx0
     - Defines a local index as the smallest positive eigenvalue of W_k
-    - Plots B(t) colored by log10 of that local index
+    - For each motif, saves the trajectory and plots B(t) colored by
+      log10 of that local index
 """
 
 import os
@@ -45,8 +46,8 @@ X0_NOMINAL = np.array([1.0, 0.2, 0.2, 0.2, 5.0, 0.0], dtype=float)
 # Measurement option used for the local index
 MEASUREMENT_OPTION = "h_BNW"  # y = [B, N, W]
 
-# Which trajectory motif to use
-MOTIF_NAME = "const_0p12"  # or "step_24h", "sin_12h"
+# Trajectory motifs to analyze (keys of motifs.MOTIFS)
+MOTIF_NAMES = ["const_0p12", "step_24h", "sin_12h"]
 
 # Finite-difference perturbations
 EPS_REL = 1e-4
@@ -154,68 +155,75 @@ def main():
     h_obj = bd.H(measurement_option=MEASUREMENT_OPTION)
     h = h_obj.h
 
-    # Choose motif
-    D_fun = motifs.MOTIFS[MOTIF_NAME]
-
-    # Sensitivity trajectory
-    t_sim, y_nominal, S = compute_sensitivity_trajectory(
-        f_handle=f,
-        h_handle=h,
-        x0_vec=X0_NOMINAL,
-        t_final=T_FINAL,
-        dt=DT,
-        D_fun=D_fun,
-    )
-
-    T, n_outputs = y_nominal.shape
-    _, _, n_states = S.shape
-
-    # Local observability index: smallest *positive* eigenvalue of W_k
-    lambda_min_pos_traj = np.zeros(T, dtype=float)
-
-    for k in range(T):
-        S_k = S[k, :, :]  # (n_outputs, n_states)
-        W_k = DT * (S_k.T @ S_k)  # (n_states, n_states)
-
-        eigvals_k = np.linalg.eigvalsh(W_k)
-        pos_mask = eigvals_k > EIGEN_TOL
-        if np.any(pos_mask):
-            lambda_min_pos_traj[k] = np.min(eigvals_k[pos_mask])
-        else:
-            lambda_min_pos_traj[k] = 0.0
-
-    # Save trajectory data
     os.makedirs(RESULTS_DIR, exist_ok=True)
-    out_path = os.path.join(
-        RESULTS_DIR, f"local_obs_{MOTIF_NAME}_{MEASUREMENT_OPTION}.npz"
-    )
-    np.savez(
-        out_path,
-        t_sim=t_sim,
-        y_nominal=y_nominal,
-        lambda_min_pos_traj=lambda_min_pos_traj,
-    )
-    print(f"Saved local observability trajectory to: {out_path}")
 
-    # Plot B(t) colored by log10 of the local index
-    B_traj = y_nominal[:, 0]  # first output is B in h_BNW
-    log_index = np.log10(np.maximum(lambda_min_pos_traj, 1e-30))
+    for motif_name in MOTIF_NAMES:
+        print("=" * 80)
+        print(f"Trajectory motif: {motif_name}")
 
-    finite_idx = np.isfinite(log_index)
-    vmin, vmax = np.percentile(log_index[finite_idx], [5, 95])
+        D_fun = motifs.MOTIFS[motif_name]
 
-    fig, ax = plt.subplots()
-    sc = ax.scatter(t_sim, B_traj, c=log_index, s=15, vmin=vmin, vmax=vmax)
-    ax.set_xlabel("t [h]")
-    ax.set_ylabel("B (total biomass)")
-    ax.set_title(
-        f"Local empirical observability index\n"
-        f"Measurement: {MEASUREMENT_OPTION}, motif: {MOTIF_NAME}"
-    )
-    cbar = fig.colorbar(sc, ax=ax)
-    cbar.set_label("log10(smallest positive eigenvalue of W_k)")
-    fig.tight_layout()
-    plt.show()
+        # Sensitivity trajectory for this motif
+        t_sim, y_nominal, S = compute_sensitivity_trajectory(
+            f_handle=f,
+            h_handle=h,
+            x0_vec=X0_NOMINAL,
+            t_final=T_FINAL,
+            dt=DT,
+            D_fun=D_fun,
+        )
+
+        T, n_outputs = y_nominal.shape
+        _, _, n_states = S.shape
+
+        # Local observability index: smallest *positive* eigenvalue of W_k
+        lambda_min_pos_traj = np.zeros(T, dtype=float)
+
+        for k in range(T):
+            S_k = S[k, :, :]  # (n_outputs, n_states)
+            W_k = DT * (S_k.T @ S_k)  # (n_states, n_states)
+
+            eigvals_k = np.linalg.eigvalsh(W_k)
+            pos_mask = eigvals_k > EIGEN_TOL
+            if np.any(pos_mask):
+                lambda_min_pos_traj[k] = np.min(eigvals_k[pos_mask])
+            else:
+                lambda_min_pos_traj[k] = 0.0
+
+        # Save trajectory data
+        out_path = os.path.join(
+            RESULTS_DIR, f"local_obs_{motif_name}_{MEASUREMENT_OPTION}.npz"
+        )
+        np.savez(
+            out_path,
+            t_sim=t_sim,
+            y_nominal=y_nominal,
+            lambda_min_pos_traj=lambda_min_pos_traj,
+        )
+        print(f"Saved local observability trajectory to: {out_path}")
+
+        # Plot B(t) colored by log10 of the local index
+        B_traj = y_nominal[:, 0]  # first output is B in h_BNW
+        log_index = np.log10(np.maximum(lambda_min_pos_traj, 1e-30))
+
+        finite_idx = np.isfinite(log_index)
+        if np.any(finite_idx):
+            vmin, vmax = np.percentile(log_index[finite_idx], [5, 95])
+        else:
+            vmin, vmax = -10.0, 0.0
+
+        fig, ax = plt.subplots()
+        sc = ax.scatter(t_sim, B_traj, c=log_index, s=15, vmin=vmin, vmax=vmax)
+        ax.set_xlabel("t [h]")
+        ax.set_ylabel("B (total biomass)")
+        ax.set_title(
+            f"Local empirical observability index\n"
+            f"Measurement: {MEASUREMENT_OPTION}, motif: {motif_name}"
+        )
+        cbar = fig.colorbar(sc, ax=ax)
+        cbar.set_label("log10(smallest positive eigenvalue of W_k)")
+        fig.tight_layout()
+        plt.show()
 
 
 if __name__ == "__main__":
