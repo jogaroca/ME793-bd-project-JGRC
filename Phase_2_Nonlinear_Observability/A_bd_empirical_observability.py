@@ -8,6 +8,8 @@ This script:
     - Evaluates several trajectory motifs (time-varying dilution inputs)
     - For each motif and measurement configuration, computes the empirical
       observability Gramian and scalar metrics.
+    - Additionally computes a Chernoff-style inverse of W to obtain
+      minimum error variances per state (in particular for Z).
     - Saves the results to results/phase2_empirical/obs_{motif}_{meas}.npz
 """
 
@@ -50,6 +52,9 @@ TRAJECTORY_MOTIFS: List[Dict[str, object]] = [
 # Finite-difference perturbation sizes
 EPS_REL = 1e-4
 EPS_ABS = 1e-6
+
+# Threshold for Chernoff-style inverse eigenvalues
+CHERNOFF_TOL = 1e-10
 
 # Measurement options to compare (must exist as methods in bd.H)
 MEASUREMENT_OPTIONS = [
@@ -140,11 +145,39 @@ def main():
 
             metrics = eo.empirical_observability_metrics(W)
 
-            print(f"lambda_min        = {metrics['lambda_min']:.3e}")
-            print(f"lambda_max        = {metrics['lambda_max']:.3e}")
-            print(f"condition_number  = {metrics['condition_number']:.3e}")
-            print(f"trace(W)          = {metrics['trace']:.3e}")
-            print(f"det(W)            = {metrics['determinant']:.3e}")
+            lambda_min = metrics["lambda_min"]
+            lambda_max = metrics["lambda_max"]
+            cond_number = metrics["condition_number"]
+            trace_W = metrics["trace"]
+            det_W = metrics["determinant"]
+            eigvals_sorted = metrics["eigenvalues"]
+
+            print(f"lambda_min        = {lambda_min:.3e}")
+            print(f"lambda_max        = {lambda_max:.3e}")
+            print(f"condition_number  = {cond_number:.3e}")
+            print(f"trace(W)          = {trace_W:.3e}")
+            print(f"det(W)            = {det_W:.3e}")
+
+            # ------------------------------------------------------------------
+            # Chernoff-style inverse: minimum error variance per state
+            # ------------------------------------------------------------------
+            # eigen-decomposition of W
+            eigvals, eigvecs = np.linalg.eigh(W)
+
+            inv_eigs = np.zeros_like(eigvals)
+            mask = eigvals > CHERNOFF_TOL
+            inv_eigs[mask] = 1.0 / eigvals[mask]
+
+            # C_chernoff = V diag(inv_eigs) V^T
+            C_chernoff = (eigvecs * inv_eigs) @ eigvecs.T
+            chernoff_diag = np.diag(C_chernoff)
+
+            # States are ordered [Z, S1, S2, S3, N, W] in bd.F
+            var_Z = float(chernoff_diag[0])     # minimum error variance for Z
+            I_Z = float(np.sqrt(W[0, 0]))       # sqrt of W_ZZ, information index
+
+            print(f"var_Z (Chernoff)  = {var_Z:.3e}")
+            print(f"I_Z = sqrt(W_ZZ)  = {I_Z:.3e}")
 
             # Save results
             out_path = os.path.join(
@@ -153,12 +186,15 @@ def main():
             np.savez(
                 out_path,
                 W=W,
-                eigenvalues=metrics["eigenvalues"],
-                lambda_min=metrics["lambda_min"],
-                lambda_max=metrics["lambda_max"],
-                trace_val=metrics["trace"],
-                determinant=metrics["determinant"],
-                condition_number=metrics["condition_number"],
+                eigenvalues=eigvals_sorted,
+                lambda_min=lambda_min,
+                lambda_max=lambda_max,
+                trace_val=trace_W,
+                determinant=det_W,
+                condition_number=cond_number,
+                chernoff_diag=chernoff_diag,
+                var_Z=var_Z,
+                I_Z=I_Z,
             )
             print(
                 f"Saved results for motif={motif_name}, "
