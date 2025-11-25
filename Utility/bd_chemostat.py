@@ -1,5 +1,7 @@
 # Utility/bd_chemostat.py
 
+from typing import Optional, Sequence, Callable
+
 from dataclasses import dataclass
 from typing import Optional, Sequence
 import numpy as np
@@ -158,34 +160,65 @@ class H(object):
 # -------------------------------------------------------------------
 # Simulador sencillo (para probar en el notebook de dinámica)
 # -------------------------------------------------------------------
-def simulate_bd(f, h, tsim_length: float = 48.0, dt: float = 0.01,
-                x0: Optional[Sequence[float]] = None,
-                D: float = 0.12):
+def simulate_bd(
+    f,
+    h,
+    tsim_length: float = 48.0,
+    dt: float = 0.01,
+    x0: Optional[Sequence[float]] = None,
+    D: float = 0.12,
+    D_fun: Optional[Callable[[float], float]] = None,
+):
     """
-    Simulador sencillo del quimiostato Bd usando scipy.integrate.odeint.
+    Simple Bd chemostat simulator using scipy.integrate.odeint.
 
-    Devuelve:
-        t_sim : (T,)
-        x_sim : (T, 6)
-        u_sim : (T, 1)
-        y_sim : (T, n_y)
+    Parameters
+    ----------
+    f : callable
+        State dynamics function x_dot = f(x, u).
+    h : callable
+        Measurement function y = h(x, u).
+    tsim_length : float
+        Final time [h].
+    dt : float
+        Time step [h] used for saving trajectories.
+    x0 : array_like, shape (6,), optional
+        Initial state. If None, a default initial state is used.
+    D : float, optional
+        Constant dilution rate [h^-1]. Used only if D_fun is None.
+    D_fun : callable, optional
+        Time-varying dilution rate u_D(t). If provided, it overrides D.
+
+    Returns
+    -------
+    t_sim : ndarray, shape (T,)
+    x_sim : ndarray, shape (T, 6)
+    u_sim : ndarray, shape (T, 1)
+    y_sim : ndarray, shape (T, n_outputs)
     """
     if x0 is None:
-        # Estados iniciales del setup de simulación en el PDF
         x0 = np.array([1.0, 0.2, 0.2, 0.2, 5.0, 0.0], dtype=float)
     else:
         x0 = np.asarray(x0, dtype=float).reshape(6,)
 
     t_sim = np.arange(0.0, tsim_length + dt, dt)
-    u_sim = np.full((t_sim.size, 1), D, dtype=float)
+
+    def D_of_t(t: float) -> float:
+        if D_fun is None:
+            return float(D)
+        return float(D_fun(float(t)))
+
+    # input trajectory for bookkeeping / plotting
+    D_vals = np.array([D_of_t(t) for t in t_sim], dtype=float)
+    u_sim = D_vals.reshape(-1, 1)
 
     def rhs(x, t):
-        # f espera (x_vec, u_vec)
-        return f(x, [D])
+        D_t = D_of_t(t)
+        return f(x, [D_t])
 
     x_sim = odeint(rhs, x0, t_sim)
 
-    # Construir salidas
+    # Build outputs
     y_list = []
     for xi, ui in zip(x_sim, u_sim):
         yi = h(xi, ui)
