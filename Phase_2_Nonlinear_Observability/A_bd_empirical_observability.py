@@ -5,20 +5,20 @@ Phase 2: Empirical nonlinear observability analysis for the Bd chemostat model.
 
 This script:
     - Uses the Bd model defined in Utility/bd_chemostat.py
-    - Computes the empirical observability Gramian for a given trajectory
-      (fixed initial condition and constant dilution rate D)
-    - Compares several measurement configurations (different outputs)
-    - Saves the Gramian and metrics to results/phase2_empirical
+    - Evaluates several trajectory motifs (time-varying dilution inputs)
+    - For each motif and measurement configuration, computes the empirical
+      observability Gramian and scalar metrics.
+    - Saves the results to results/phase2_empirical/obs_{motif}_{meas}.npz
 """
 
 import os
 import sys
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 
 # ----------------------------------------------------------------------
-# Add Utility directory to the Python path
+# Paths and imports
 # ----------------------------------------------------------------------
 CURRENT_DIR = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
@@ -29,17 +29,23 @@ if UTILITY_DIR not in sys.path:
 
 import bd_chemostat as bd  # noqa: E402
 import empirical_observability as eo  # noqa: E402
-
+import bd_motifs as motifs  # noqa: E402
 
 # ----------------------------------------------------------------------
 # Configuration
 # ----------------------------------------------------------------------
 T_FINAL = 48.0       # total simulation time [h]
 DT = 0.05            # time step [h]
-D_CONST = 0.12       # constant dilution rate [h^-1]
 
 # Nominal initial condition [Z, S1, S2, S3, N, W]
 X0_NOMINAL = np.array([1.0, 0.2, 0.2, 0.2, 5.0, 0.0], dtype=float)
+
+# Trajectory motifs to explore
+TRAJECTORY_MOTIFS: List[Dict[str, object]] = [
+    {"name": "const_0p12", "x0": X0_NOMINAL, "D_fun": motifs.D_const_0p12},
+    {"name": "step_24h",   "x0": X0_NOMINAL, "D_fun": motifs.D_step_24h},
+    {"name": "sin_12h",    "x0": X0_NOMINAL, "D_fun": motifs.D_sin_12h},
+]
 
 # Finite-difference perturbation sizes
 EPS_REL = 1e-4
@@ -57,18 +63,18 @@ MEASUREMENT_OPTIONS = [
 
 
 # ----------------------------------------------------------------------
-# Helper to build a simulate_outputs_fn for a given measurement option
+# Helper: closure that returns y(t) given x0, for a given motif
 # ----------------------------------------------------------------------
 def build_simulate_outputs_fn(
     f_handle,
     h_handle,
     t_final: float,
     dt: float,
-    D_value: float,
+    D_fun,
 ):
     """
     Returns a closure simulate_outputs_fn(x0) that simulates the Bd model
-    from initial condition x0, with fixed D, t_final and dt, and returns
+    with a fixed motif D_fun(t), final time and time step, and returns
     only the output trajectory y(t).
     """
 
@@ -79,7 +85,8 @@ def build_simulate_outputs_fn(
             tsim_length=t_final,
             dt=dt,
             x0=x0_vec,
-            D=D_value,
+            D=0.0,       # ignored because D_fun is provided
+            D_fun=D_fun,
         )
         return y_sim
 
@@ -90,76 +97,73 @@ def build_simulate_outputs_fn(
 # Main analysis
 # ----------------------------------------------------------------------
 def main():
-    # Build dynamics function f(x, u)
+    # Dynamics
     f_obj = bd.F()
     f = f_obj.f
 
-    results: Dict[str, Dict[str, object]] = {}
+    results_root = os.path.join(PROJECT_ROOT, "results", "phase2_empirical")
+    os.makedirs(results_root, exist_ok=True)
 
-    for meas_opt in MEASUREMENT_OPTIONS:
+    for motif in TRAJECTORY_MOTIFS:
+        motif_name = motif["name"]
+        x0_val = motif["x0"]
+        D_fun = motif["D_fun"]
+
         print("=" * 80)
-        print(f"Measurement option: {meas_opt}")
+        print(f"Trajectory motif: {motif_name}")
 
-        # Build measurement function h(x, u)
-        h_obj = bd.H(measurement_option=meas_opt)
-        h = h_obj.h
+        for meas_opt in MEASUREMENT_OPTIONS:
+            print("-" * 80)
+            print(f"Measurement option: {meas_opt}")
 
-        # Closure that simulates y(t) given x0
-        simulate_outputs_fn = build_simulate_outputs_fn(
-            f_handle=f,
-            h_handle=h,
-            t_final=T_FINAL,
-            dt=DT,
-            D_value=D_CONST,
-        )
+            # Measurement
+            h_obj = bd.H(measurement_option=meas_opt)
+            h = h_obj.h
 
-        # Compute empirical observability matrix and Gramian
-        J, W = eo.empirical_observability_matrix(
-            simulate_outputs_fn=simulate_outputs_fn,
-            x0=X0_NOMINAL,
-            dt=DT,
-            eps_rel=EPS_REL,
-            eps_abs=EPS_ABS,
-        )
+            # Closure that simulates y(t) given x0
+            simulate_outputs_fn = build_simulate_outputs_fn(
+                f_handle=f,
+                h_handle=h,
+                t_final=T_FINAL,
+                dt=DT,
+                D_fun=D_fun,
+            )
 
-        metrics = eo.empirical_observability_metrics(W)
+            # Empirical observability matrix and Gramian
+            J, W = eo.empirical_observability_matrix(
+                simulate_outputs_fn=simulate_outputs_fn,
+                x0=x0_val,
+                dt=DT,
+                eps_rel=EPS_REL,
+                eps_abs=EPS_ABS,
+            )
 
-        print(f"lambda_min        = {metrics['lambda_min']:.3e}")
-        print(f"lambda_max        = {metrics['lambda_max']:.3e}")
-        print(f"condition_number  = {metrics['condition_number']:.3e}")
-        print(f"trace(W)          = {metrics['trace']:.3e}")
-        print(f"det(W)            = {metrics['determinant']:.3e}")
-        print(f"eigenvalues (sorted, log10): "
-              f"{np.log10(np.maximum(metrics['eigenvalues'], 1e-30))}")
+            metrics = eo.empirical_observability_metrics(W)
 
-        results[meas_opt] = {
-            "J": J,
-            "W": W,
-            "metrics": metrics,
-        }
+            print(f"lambda_min        = {metrics['lambda_min']:.3e}")
+            print(f"lambda_max        = {metrics['lambda_max']:.3e}")
+            print(f"condition_number  = {metrics['condition_number']:.3e}")
+            print(f"trace(W)          = {metrics['trace']:.3e}")
+            print(f"det(W)            = {metrics['determinant']:.3e}")
 
-    # ------------------------------------------------------------------
-    # Save results
-    # ------------------------------------------------------------------
-    results_dir = os.path.join(PROJECT_ROOT, "results", "phase2_empirical")
-    os.makedirs(results_dir, exist_ok=True)
-
-    for meas_opt, data in results.items():
-        W = data["W"]
-        metrics = data["metrics"]
-
-        out_path = os.path.join(results_dir, f"obs_constD_{meas_opt}.npz")
-        np.savez(
-            out_path,
-            W=W,
-            eigenvalues=metrics["eigenvalues"],
-            lambda_min=metrics["lambda_min"],
-            lambda_max=metrics["lambda_max"],
-            trace_val=metrics["trace"],
-            determinant=metrics["determinant"],
-            condition_number=metrics["condition_number"],
-        )
-        print(f"Saved results for {meas_opt} to: {out_path}")
+            # Save results
+            out_path = os.path.join(
+                results_root, f"obs_{motif_name}_{meas_opt}.npz"
+            )
+            np.savez(
+                out_path,
+                W=W,
+                eigenvalues=metrics["eigenvalues"],
+                lambda_min=metrics["lambda_min"],
+                lambda_max=metrics["lambda_max"],
+                trace_val=metrics["trace"],
+                determinant=metrics["determinant"],
+                condition_number=metrics["condition_number"],
+            )
+            print(
+                f"Saved results for motif={motif_name}, "
+                f"meas={meas_opt} to: {out_path}"
+            )
 
 
 if __name__ == "__main__":
