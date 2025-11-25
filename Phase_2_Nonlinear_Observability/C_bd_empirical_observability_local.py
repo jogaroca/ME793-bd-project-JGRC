@@ -7,8 +7,8 @@ This script:
     - Simulates the Bd model for a fixed initial condition and constant D
     - Computes the local empirical observability Gramian W_k at each time step
       from finite-difference sensitivities dy(t_k)/dx0
-    - Defines a local index lambda_min(W_k)
-    - Plots B(t) colored by log10(lambda_min(W_k))
+    - Defines a local index as the smallest positive eigenvalue of W_k
+    - Plots B(t) colored by log10 of that local index
 """
 
 import os
@@ -49,6 +49,9 @@ EPS_ABS = 1e-6
 # Measurement option used for the local index
 MEASUREMENT_OPTION = "h_BNW"  # y = [B, N, W]
 
+# Threshold to decide which eigenvalues are "effectively zero"
+EIGEN_TOL = 1e-10
+
 
 # ----------------------------------------------------------------------
 # Sensitivity computation
@@ -87,19 +90,6 @@ def compute_sensitivity_trajectory(
     """
     Compute the trajectory y(t) and the sensitivity tensor S(t) = dy/dx0
     using central finite differences on the initial state x0.
-
-    Parameters
-    ----------
-    f_handle, h_handle : callables
-        Dynamics and measurement functions from bd_chemostat.
-    x0_vec : ndarray, shape (n_states,)
-        Nominal initial condition.
-    t_final : float
-        Final time of the simulation.
-    dt : float
-        Time step.
-    D_value : float
-        Constant dilution rate.
 
     Returns
     -------
@@ -141,7 +131,7 @@ def compute_sensitivity_trajectory(
             x0_vec=x_plus,
             t_final=t_final,
             dt=dt,
-            D_value=D_value,
+            D_value=D_VALUE,
         )
         _, _, _, y_minus = simulate_outputs(
             f_handle=f_handle,
@@ -149,7 +139,7 @@ def compute_sensitivity_trajectory(
             x0_vec=x_minus,
             t_final=t_final,
             dt=dt,
-            D_value=D_value,
+            D_value=D_VALUE,
         )
 
         dy = (y_plus - y_minus) / (2.0 * delta_i)  # shape (T, n_outputs)
@@ -182,17 +172,21 @@ def main():
     T, n_outputs = y_nominal.shape
     _, _, n_states = S.shape
 
-    # Local observability Gramian and index at each time step
-    lambda_min_traj = np.zeros(T, dtype=float)
+    # Local observability index at each time step:
+    # smallest *positive* eigenvalue of W_k = S_k^T S_k * DT
+    lambda_min_pos_traj = np.zeros(T, dtype=float)
 
     for k in range(T):
-        # S_k: (n_outputs, n_states)
-        S_k = S[k, :, :]  # dy/dx0 at time t_k
-        W_k = DT * (S_k.T @ S_k)  # local Gramian
+        S_k = S[k, :, :]  # (n_outputs, n_states)
+        W_k = DT * (S_k.T @ S_k)  # (n_states, n_states)
 
-        # eigenvalues of W_k
         eigvals_k = np.linalg.eigvalsh(W_k)
-        lambda_min_traj[k] = np.min(eigvals_k)
+        # Keep only eigenvalues that are significantly positive
+        pos_mask = eigvals_k > EIGEN_TOL
+        if np.any(pos_mask):
+            lambda_min_pos_traj[k] = np.min(eigvals_k[pos_mask])
+        else:
+            lambda_min_pos_traj[k] = 0.0
 
     # Save trajectory data
     os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -201,16 +195,20 @@ def main():
         out_path,
         t_sim=t_sim,
         y_nominal=y_nominal,
-        lambda_min_traj=lambda_min_traj,
+        lambda_min_pos_traj=lambda_min_pos_traj,
     )
     print(f"Saved local observability trajectory to: {out_path}")
 
-    # Plot B(t) colored by log10(lambda_min)
+    # Plot B(t) colored by log10 of the local index
     B_traj = y_nominal[:, 0]  # first output is B in h_BNW
-    log_lambda_min = np.log10(np.maximum(lambda_min_traj, 1e-30))
+    log_index = np.log10(np.maximum(lambda_min_pos_traj, 1e-30))
+
+    # Use percentiles to enhance contrast in the color scale
+    finite_idx = np.isfinite(log_index)
+    vmin, vmax = np.percentile(log_index[finite_idx], [5, 95])
 
     fig, ax = plt.subplots()
-    sc = ax.scatter(t_sim, B_traj, c=log_lambda_min, s=15)
+    sc = ax.scatter(t_sim, B_traj, c=log_index, s=15, vmin=vmin, vmax=vmax)
     ax.set_xlabel("t [h]")
     ax.set_ylabel("B (total biomass)")
     ax.set_title(
@@ -218,7 +216,7 @@ def main():
         f"Measurement option: {MEASUREMENT_OPTION}"
     )
     cbar = fig.colorbar(sc, ax=ax)
-    cbar.set_label("log10(lambda_min(W_k))")
+    cbar.set_label("log10(smallest positive eigenvalue of W_k)")
     fig.tight_layout()
     plt.show()
 
