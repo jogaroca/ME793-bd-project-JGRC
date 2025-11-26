@@ -1,5 +1,3 @@
-# Phase_3_Nonlinear_Estimation/B_bd_ekf_example_BNW_const.py
-
 """
 EKF example for the Bd chemostat:
 - Motif: const_0p12
