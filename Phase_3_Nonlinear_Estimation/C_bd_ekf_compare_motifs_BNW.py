@@ -1,5 +1,3 @@
-# Phase_3_Nonlinear_Estimation/C_bd_ekf_compare_motifs_BNW.py
-
 """
 Compare EKF performance for different dilution motifs using measurement set h_BNW = [B, N, W]^T.
 
