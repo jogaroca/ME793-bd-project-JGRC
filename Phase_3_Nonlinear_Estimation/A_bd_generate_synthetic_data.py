@@ -1,4 +1,3 @@
-# Phase_3_Nonlinear_Estimation/A_bd_generate_synthetic_data.py
 """
 Phase 3: Synthetic data generation for nonlinear estimator design.
 
