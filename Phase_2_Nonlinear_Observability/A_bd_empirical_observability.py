@@ -1,5 +1,3 @@
-# Phase_2_Nonlinear_Observability/A_bd_empirical_observability.py
-
 """
 Phase 2: Empirical nonlinear observability analysis for the Bd chemostat model.
 
