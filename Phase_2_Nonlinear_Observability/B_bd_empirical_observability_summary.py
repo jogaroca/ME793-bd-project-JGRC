@@ -1,5 +1,3 @@
-# Phase_2_Nonlinear_Observability/B_bd_empirical_observability_summary.py
-
 """
 Summarize and plot empirical observability metrics for the Bd chemostat.
 
