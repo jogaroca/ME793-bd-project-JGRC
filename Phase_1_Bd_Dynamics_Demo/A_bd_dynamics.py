@@ -1,5 +1,3 @@
-# Phase_1_Bd_Dynamics_Demo/A_bd_dynamics.py
-
 import sys
 import os
 import numpy as np
