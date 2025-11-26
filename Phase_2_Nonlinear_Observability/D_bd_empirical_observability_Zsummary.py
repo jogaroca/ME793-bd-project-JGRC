@@ -1,5 +1,3 @@
-# Phase_2_Nonlinear_Observability/D_bd_empirical_observability_Zsummary.py
-
 import os
 import numpy as np
 import matplotlib.pyplot as plt
