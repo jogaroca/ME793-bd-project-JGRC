@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from . import bd_chemostat as bd  # import relativo (Utility es un paquete)
+import bd_chemostat as bd
 
 
 class BdEKF:
