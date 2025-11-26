@@ -1,5 +1,3 @@
-# Phase_2_Nonlinear_Observability/C_bd_empirical_observability_local.py
-
 """
 Local empirical observability index along Bd chemostat trajectories.
 
