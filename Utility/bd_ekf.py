@@ -3,11 +3,11 @@
 """
 Extended Kalman Filter (EKF) for the Bd chemostat model.
 
-- Usa la dinámica continua f(x,u) de bd_chemostat.F
-- Discretiza con Euler: x_{k+1} = x_k + dt * f(x_k, u_k)
-- Linealiza f numéricamente (d f/dx) para obtener la matriz A_k
-- Implementa distintas funciones de medición (BNW, BN, B, NW, N, W)
-  y sus Jacobianas H(x) (aquí todas son lineales en x, así que H es constante).
+- Uses the continuous dynamics f(x,u) from bd_chemostat.F
+- Discretizes with Euler: x_{k+1} = x_k + dt * f(x_k, u_k)
+- Linearizes f numerically (d f/dx) to obtain the matrix A_k
+- Implements different measurement functions (BNW, BN, B, NW, N, W)
+  and their Jacobians H(x) (here all are linear in x, so H is constant).
 """
 
 from __future__ import annotations
