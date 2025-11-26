@@ -1,5 +1,3 @@
-# Phase_2_Nonlinear_Observability/E_bd_trajectories_plots.py
-
 """
 Simple trajectory plots for the Bd chemostat:
  - Dilution motifs D(t) used in the empirical observability analysis.
