@@ -1,5 +1,3 @@
-# Utility/bd_chemostat.py
-
 from dataclasses import dataclass
 from typing import Optional, Sequence, Callable
 import numpy as np
