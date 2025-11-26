@@ -1,5 +1,3 @@
-# Phase_3_Nonlinear_Estimation/D_bd_ekf_compare_meas_step.py
-
 """
 Compare EKF performance for different measurement sets using a fixed
 dilution motif (step_24h).
