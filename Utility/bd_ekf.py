@@ -1,5 +1,3 @@
-# Utility/bd_ekf.py
-
 """
 Extended Kalman Filter (EKF) for the Bd chemostat model.
 
