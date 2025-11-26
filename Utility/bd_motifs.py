@@ -1,5 +1,3 @@
-# Utility/bd_motifs.py
-
 """
 Input (dilution) control motifs for the Bd chemostat.
 
