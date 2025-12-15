@@ -31,7 +31,7 @@ setup(
         'Utility': ['Requirements/*.txt', 'Requirements/*'],
     },
     install_requires=read_requirements(),
-    python_requires='>=3.8',
+    python_requires='>=3.9',
     description='ME793 Bd chemostat project utilities (observability + nonlinear estimation)',
     author='JGRC',
 )
