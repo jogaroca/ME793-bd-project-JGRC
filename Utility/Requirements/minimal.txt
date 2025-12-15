@@ -1,5 +1,0 @@
-# Same as repo-level requirements_minimal.txt
-numpy
-scipy
-matplotlib
-pandas
