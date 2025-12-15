@@ -1,6 +1,5 @@
-# Minimal dependencies to run Phases 1–3 (EKF + empirical observability)
-# Install with: pip install -r requirements_minimal.txt
 numpy
 scipy
 matplotlib
 pandas
+tqdm
