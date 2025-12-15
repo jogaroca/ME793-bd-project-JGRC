@@ -1,8 +1,1 @@
-# Full (legacy) requirements.
-# For the minimum set needed to run the project, use:
-#   pip install -r requirements_minimal.txt
-numpy
-scipy
-matplotlib
-pandas
-pybounds
+-r requirements_minimal.txt
