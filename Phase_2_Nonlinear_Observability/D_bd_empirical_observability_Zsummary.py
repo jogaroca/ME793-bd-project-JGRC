@@ -6,7 +6,7 @@ CURRENT_DIR = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
 RESULTS_DIR = os.path.join(PROJECT_ROOT, "results", "phase2_empirical")
 
-MOTIFS = ["const_0p12", "step_24h", "sin_12h"]
+MOTIFS = ["const_0p12", "step_24h", "sin_12h", "sin_12h_big"]
 MEAS_OPTIONS = ["h_BNW", "h_BN", "h_B", "h_NW", "h_N", "h_W"]
 
 def load_metrics(motif, meas):
