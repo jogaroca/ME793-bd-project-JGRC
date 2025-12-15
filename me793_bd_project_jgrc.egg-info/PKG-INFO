@@ -1,6 +1,0 @@
-Metadata-Version: 2.1
-Name: me793-bd-project-jgrc
-Version: 0.1.0
-Summary: ME793 Bd chemostat project utilities (observability + nonlinear estimation)
-Author: JGRC
-Requires-Python: >=3.8
