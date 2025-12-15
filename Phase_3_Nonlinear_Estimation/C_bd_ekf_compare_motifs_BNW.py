@@ -127,12 +127,14 @@ def run_ekf_for_motif(motif_name: str, seed: int = 123):
 # Main: compare motifs
 # ----------------------------------------------------------------------
 def main():
-    motifs = ["const_0p12", "step_24h", "sin_12h"]
+    motifs = ["const_0p12", "step_24h", "sin_12h", "sin_12h_big"]
     motif_labels = {
-        "const_0p12": "Constant D=0.12 h$^{-1}$",
-        "step_24h": "Step at 24 h",
-        "sin_12h": "Sinusoidal (12 h period)",
-    }
+    "const_0p12": "Constant D=0.12 h$^{-1}$",
+    "step_24h": "Step at 24 h",
+    "sin_12h": "Sinusoidal (12 h period, amp=0.05)",
+    "sin_12h_big": "Sinusoidal (12 h period, amp=0.10)",
+}
+
 
     results = {}
     rms_list = []
@@ -156,7 +158,8 @@ def main():
         Z_true = x_true[:, 0]
         Z_hat = x_hat[:, 0]
 
-        plt.subplot(3, 1, i)
+        n = len(motifs)
+        plt.subplot(n, 1, i)
         plt.plot(t, Z_true, "k-", label="Z true")
         plt.plot(t, Z_hat, "r--", label="Z EKF")
         plt.ylabel("Z")
