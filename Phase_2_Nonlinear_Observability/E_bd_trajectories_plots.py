@@ -24,7 +24,7 @@ TRAJECTORY_MOTIFS: List[Tuple[str, callable]] = [
     ("const_0p12", motifs.D_const_0p12),
     ("step_24h",   motifs.D_step_24h),
     ("sin_12h",    motifs.D_sin_12h),
-    ("sin_12h_big", motifs.D_sin_12h_big)
+    ("sin_12h_big", motifs.D_sin_12h_big),
 ]
 
 
