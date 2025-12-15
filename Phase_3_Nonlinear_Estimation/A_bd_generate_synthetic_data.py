@@ -41,6 +41,7 @@ TRAJECTORY_MOTIFS: List[Dict[str, object]] = [
     {"name": "const_0p12", "x0": X0_NOMINAL, "D_fun": motifs.D_const_0p12},
     {"name": "step_24h",   "x0": X0_NOMINAL, "D_fun": motifs.D_step_24h},
     {"name": "sin_12h",    "x0": X0_NOMINAL, "D_fun": motifs.D_sin_12h},
+    {"name": "sin_12h_big",  "x0": X0_NOMINAL, "D_fun": motifs.D_sin_12h_big},
 ]
 
 
