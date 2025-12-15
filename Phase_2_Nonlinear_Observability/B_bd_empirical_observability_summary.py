@@ -21,7 +21,7 @@ CURRENT_DIR = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
 RESULTS_DIR = os.path.join(PROJECT_ROOT, "results", "phase2_empirical")
 
-MOTIF_NAMES: List[str] = ["const_0p12", "step_24h", "sin_12h"]
+MOTIF_NAMES: List[str] = ["const_0p12", "step_24h", "sin_12h", "sin_12h_big"]
 
 MEASUREMENT_OPTIONS: List[str] = [
     "h_BNW",
