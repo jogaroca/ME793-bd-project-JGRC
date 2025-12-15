@@ -14,7 +14,7 @@ T_FINAL = 48.0   # [h]
 DT      = 0.05   # [h]
 X0_NOMINAL = np.array([1.0, 0.2, 0.2, 0.2, 5.0, 0.0], dtype=float)
 
-# Para que la escala de color sea comparable entre figuras (estilo Lesson 8B)
+# Color scale comparable across figures (Lesson 8B idea)
 V_MIN = 1e-5
 V_MAX = 1e8
 CMAP  = "inferno"
@@ -58,7 +58,6 @@ def make_figure(meas_opt: str, results_dir: str):
 
     state_names = bd.F().return_state_names()
     n = len(state_names)
-
     norm = LogNorm(vmin=V_MIN, vmax=V_MAX)
 
     fig, axes = plt.subplots(n, 2, figsize=(13, 2.1*n), sharex="col")
@@ -67,7 +66,7 @@ def make_figure(meas_opt: str, results_dir: str):
         axL = axes[i, 0]; axR = axes[i, 1]
         mev_i = np.maximum(mev[:, i], 1e-30)
 
-        # Interpolar MEV a la malla de simulación para colorear x(t)
+        # color x(t) using MEV interpolated onto simulation grid
         mev_on_t = np.interp(t_sim, t_mid, mev_i, left=mev_i[0], right=mev_i[-1])
 
         colored_line(axL, t_sim, x_nom[:, i], mev_on_t, norm=norm, cmap=CMAP)
@@ -93,7 +92,7 @@ def make_figure(meas_opt: str, results_dir: str):
     out_png = os.path.join(results_dir, f"mev_{MOTIF_NAME}_{meas_opt}_lesson8B_colored.png")
     out_pdf = os.path.join(results_dir, f"mev_{MOTIF_NAME}_{meas_opt}_lesson8B_colored.pdf")
     fig.savefig(out_png, dpi=300)
-    fig.savefig(out_pdf)  # vector-friendly
+    fig.savefig(out_pdf)
     plt.close(fig)
     return out_png, out_pdf
 
