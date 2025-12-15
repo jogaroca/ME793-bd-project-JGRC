@@ -31,7 +31,7 @@ def main():
         "phase3_estimation",
         f"truth_motif_{motif_name}.npz",
     )
-    data = np.load(truth_path)
+    data = load_truth_or_fail(PROJECT_ROOT, motif_name)
 
     t = data["t"]                # (T,)
     x_true = data["x_true"]      # (T, 6)
