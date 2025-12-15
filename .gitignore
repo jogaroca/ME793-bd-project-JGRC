@@ -18,3 +18,11 @@ Thumbs.db
 results/
 outputs/
 figures/
+
+.venv/
+venv/
+env/
+*.pt
+*.npz
+*.npy
+.pytest_cache/
