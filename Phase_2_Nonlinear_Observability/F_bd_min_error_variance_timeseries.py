@@ -1,4 +1,4 @@
-""" 
+"""
 Phase 2 (add-on): Sliding-window minimum error variance time series.
 
 This script computes, for each trajectory motif and measurement option:
@@ -19,9 +19,10 @@ Outputs
 -------
 Saves, for each (motif, measurement option):
   - results/phase2_empirical/mev_{motif}_{meas}.npz
-  - results/phase2_empirical/mev_{motif}_{meas}.png
+  - results/phase2_empirical/mev_{motif}_{meas}.png                  (MEV only, 3x2)
+  - results/phase2_empirical/mev_{motif}_{meas}_lesson8B.png         (state + MEV, 6x2)
 
-The .npz contains t_mid, mev (n_windows x n_states), and metadata.
+The .npz contains t_sim, t_mid, mev (n_windows x n_states), y_nominal, and metadata.
 
 Notes
 -----
@@ -62,10 +63,10 @@ X0_NOMINAL = np.array([1.0, 0.2, 0.2, 0.2, 5.0, 0.0], dtype=float)
 
 # Motifs to analyze
 TRAJECTORY_MOTIFS: List[Dict[str, object]] = [
-    {"name": "const_0p12", "x0": X0_NOMINAL, "D_fun": motifs.D_const_0p12},
-    {"name": "step_24h",   "x0": X0_NOMINAL, "D_fun": motifs.D_step_24h},
-    {"name": "sin_12h",    "x0": X0_NOMINAL, "D_fun": motifs.D_sin_12h},
-    {"name": "sin_12h_big", "x0": X0_NOMINAL, "D_fun": motifs.D_sin_12h_big},
+    {"name": "const_0p12",   "x0": X0_NOMINAL, "D_fun": motifs.D_const_0p12},
+    {"name": "step_24h",     "x0": X0_NOMINAL, "D_fun": motifs.D_step_24h},
+    {"name": "sin_12h",      "x0": X0_NOMINAL, "D_fun": motifs.D_sin_12h},
+    {"name": "sin_12h_big",  "x0": X0_NOMINAL, "D_fun": motifs.D_sin_12h_big},
 ]
 
 # Measurement options
@@ -126,6 +127,29 @@ def build_simulate_outputs_fn(f_handle, h_handle, t_final: float, dt: float, D_f
     return simulate_outputs_fn
 
 
+def simulate_nominal_state_trajectory(f_handle, h_handle, t_final: float, dt: float, x0: np.ndarray, D_fun):
+    """
+    Simulate the full nominal trajectory (t, x(t), u(t), y(t)) for plotting states.
+    Tries to be robust to slight differences in simulate_bd return ordering.
+    """
+    sim_out = bd.simulate_bd(
+        f=f_handle,
+        h=h_handle,
+        tsim_length=t_final,
+        dt=dt,
+        x0=x0,
+        D=0.0,
+        D_fun=D_fun,
+    )
+
+    # Expected: (t, x, u, y). If not, we fail loudly with a helpful message.
+    if not isinstance(sim_out, (tuple, list)) or len(sim_out) < 4:
+        raise RuntimeError("bd.simulate_bd did not return a 4-tuple (t, x, u, y). Please check its signature.")
+
+    t_sim, x_sim, u_sim, y_sim = sim_out[0], sim_out[1], sim_out[2], sim_out[3]
+    return np.asarray(t_sim), np.asarray(x_sim), np.asarray(u_sim), np.asarray(y_sim)
+
+
 def measurement_noise_vars_for_option(meas_opt: str) -> np.ndarray:
     """Map measurement option name to a per-output variance vector."""
     h_obj = bd.H(measurement_option=meas_opt)
@@ -154,6 +178,48 @@ def plot_mev_timeseries(t_mid: np.ndarray, mev: np.ndarray, title: str, out_png:
     plt.close(fig)
 
 
+def plot_states_and_mev(
+    t_sim: np.ndarray,
+    x_nominal: np.ndarray,
+    t_mid: np.ndarray,
+    mev: np.ndarray,
+    title: str,
+    out_png: str,
+):
+    """
+    Lesson-8B style plot: 6x2 grid.
+      Left: x_i(t) nominal state trajectory
+      Right: MEV_i(t) (semilogy)
+    """
+    x_nominal = np.asarray(x_nominal, dtype=float)
+    mev = np.asarray(mev, dtype=float)
+
+    fig, axes = plt.subplots(nrows=6, ncols=2, figsize=(12, 14), sharex="col")
+
+    for i, name in enumerate(STATE_NAMES):
+        # Left column: state trajectory
+        axL = axes[i, 0]
+        axL.plot(t_sim, x_nominal[:, i])
+        axL.set_ylabel(f"{name}")
+        axL.grid(True, alpha=0.3)
+
+        # Right column: MEV time series
+        axR = axes[i, 1]
+        axR.semilogy(t_mid, np.maximum(mev[:, i], 1e-30))
+        axR.set_ylabel(f"MEV({name})")
+        axR.grid(True, which="both", alpha=0.3)
+
+    axes[-1, 0].set_xlabel("t [h]")
+    axes[-1, 1].set_xlabel("t [h]")
+    axes[0, 0].set_title("State trajectory")
+    axes[0, 1].set_title("Minimum error variance (CRLB)")
+
+    fig.suptitle(title)
+    fig.tight_layout(rect=[0, 0.02, 1, 0.97])
+    fig.savefig(out_png, dpi=200)
+    plt.close(fig)
+
+
 # ----------------------------------------------------------------------
 # Main
 # ----------------------------------------------------------------------
@@ -171,9 +237,6 @@ def main():
     if step_steps < 1:
         raise ValueError("STEP_HOURS too small relative to DT.")
 
-    # Time grid (for reference)
-    t_sim = np.arange(0.0, T_FINAL + DT, DT)
-
     for motif in TRAJECTORY_MOTIFS:
         motif_name = str(motif["name"])
         x0_val = np.asarray(motif["x0"], dtype=float).reshape(-1)
@@ -188,8 +251,14 @@ def main():
 
             out_npz = os.path.join(RESULTS_DIR, f"mev_{motif_name}_{meas_opt}.npz")
             out_png = os.path.join(RESULTS_DIR, f"mev_{motif_name}_{meas_opt}.png")
+            out_png_l8b = os.path.join(RESULTS_DIR, f"mev_{motif_name}_{meas_opt}_lesson8B.png")
 
-            if (not FORCE_RECOMPUTE) and os.path.exists(out_npz) and os.path.exists(out_png):
+            if (
+                (not FORCE_RECOMPUTE)
+                and os.path.exists(out_npz)
+                and os.path.exists(out_png)
+                and os.path.exists(out_png_l8b)
+            ):
                 print(f"Found cached outputs. Skipping: {out_npz}")
                 continue
 
@@ -198,7 +267,17 @@ def main():
             h = h_obj.h
             sensor_names = h(np.zeros(6), [0.0], return_measurement_names=True)
 
-            # Simulate y(t) given x0
+            # Nominal state trajectory for plotting
+            t_sim, x_nominal, u_nominal, y_nominal_check = simulate_nominal_state_trajectory(
+                f_handle=f,
+                h_handle=h,
+                t_final=T_FINAL,
+                dt=DT,
+                x0=x0_val,
+                D_fun=D_fun,
+            )
+
+            # Simulate y(t) given x0 for sensitivities
             simulate_outputs_fn = build_simulate_outputs_fn(
                 f_handle=f,
                 h_handle=h,
@@ -215,9 +294,17 @@ def main():
                 eps_abs=EPS_ABS,
             )
 
+            # Defensive: align t_sim to y_nominal length if needed
             if y_nominal.shape[0] != t_sim.size:
-                # Defensive check (should not happen with bd.simulate_bd)
                 t_sim = np.arange(0.0, DT * y_nominal.shape[0], DT)
+
+                # Also align x_nominal if lengths mismatch (rare; depends on simulate_bd implementation)
+                if x_nominal.shape[0] != t_sim.size:
+                    min_len = min(x_nominal.shape[0], t_sim.size)
+                    t_sim = t_sim[:min_len]
+                    x_nominal = x_nominal[:min_len, :]
+                    y_nominal = y_nominal[:min_len, :]
+                    S = S[:min_len, :, :]
 
             # Noise variances for this measurement set
             noise_vars = measurement_noise_vars_for_option(meas_opt)
@@ -239,6 +326,8 @@ def main():
                 t_mid=t_mid,
                 mev=mev,
                 y_nominal=y_nominal,
+                x_nominal=x_nominal,
+                u_nominal=u_nominal,
                 motif_name=motif_name,
                 measurement_option=meas_opt,
                 state_names=np.array(STATE_NAMES, dtype=object),
@@ -256,8 +345,21 @@ def main():
                 f"Minimum error variance (CRLB) via sliding Fisher\n"
                 f"motif={motif_name}, meas={meas_opt}, window={WINDOW_HOURS}h, step={STEP_HOURS}h"
             )
+
+            # Original compact MEV-only figure
             plot_mev_timeseries(t_mid, mev, title, out_png)
             print(f"Saved figure to: {out_png}")
+
+            # Lesson-8B style: state + MEV
+            plot_states_and_mev(
+                t_sim=t_sim,
+                x_nominal=x_nominal,
+                t_mid=t_mid,
+                mev=mev,
+                title=title,
+                out_png=out_png_l8b,
+            )
+            print(f"Saved Lesson-8B style figure to: {out_png_l8b}")
 
 
 if __name__ == "__main__":
