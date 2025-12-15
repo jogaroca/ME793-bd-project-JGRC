@@ -40,7 +40,7 @@ X0_NOMINAL = np.array([1.0, 0.2, 0.2, 0.2, 5.0, 0.0], dtype=float)
 MEASUREMENT_OPTION = "h_BNW"  # y = [B, N, W]
 
 # Trajectory motifs to analyze (keys of motifs.MOTIFS)
-MOTIF_NAMES = ["const_0p12", "step_24h", "sin_12h"]
+MOTIF_NAMES = ["const_0p12", "step_24h", "sin_12h", "sin_12h_big"]
 
 # Finite-difference perturbations
 EPS_REL = 1e-4
