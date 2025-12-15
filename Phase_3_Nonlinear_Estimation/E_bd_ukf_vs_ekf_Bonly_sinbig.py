@@ -50,8 +50,8 @@ def main():
     truth_path = os.path.join(
         PROJECT_ROOT, "results", "phase3_estimation", f"truth_motif_{motif_name}.npz"
     )
-    data = np.load(truth_path)
-
+    data = load_truth_or_fail(PROJECT_ROOT, motif_name)
+    
     t = data["t"]
     x_true = data["x_true"]
     u_D = data["u_D"]
