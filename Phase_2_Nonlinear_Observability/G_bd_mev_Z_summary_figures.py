@@ -1,4 +1,3 @@
-%%writefile Phase_2_Nonlinear_Observability/G_bd_mev_Z_summary_figures.py
 import os
 import numpy as np
 import matplotlib.pyplot as plt
