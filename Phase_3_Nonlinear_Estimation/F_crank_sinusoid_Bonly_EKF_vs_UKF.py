@@ -133,4 +133,242 @@ def main() -> None:
     args = parser.parse_args()
 
     meas_opt = args.meas_opt
-    motifs = [args.motif_a, args.motif_b]()
+    motifs = [args.motif_a, args.motif_b]
+
+    out_figs = results_dir() / "figures"
+    out_metrics = results_dir() / "metrics"
+    out_filters = results_dir() / "filters"
+    _ensure_dir(out_figs)
+    _ensure_dir(out_metrics)
+    _ensure_dir(out_filters)
+
+    print("=" * 80)
+    print("Phase 3 - Milestone 5: B-only crank comparison (EKF vs UKF)")
+    print(f"meas_opt           : {meas_opt}")
+    print(f"motifs             : {motifs}")
+    print(f"q_scale            : {args.q_scale}")
+    print(f"init perturb (rel) : {args.init_perturb_scale}")
+    print("=" * 80)
+
+    # Aggregate results
+    runs: Dict[str, Dict[str, Dict[str, np.ndarray]]] = {}
+    summary_rows = []
+
+    for motif in motifs:
+        truth_path = truth_file(motif)
+        meas_path = meas_file(motif, meas_opt)
+
+        if not truth_path.exists():
+            raise FileNotFoundError(f"Missing truth file: {truth_path}. Run A_generate_truth.py first.")
+        if not meas_path.exists():
+            raise FileNotFoundError(f"Missing measurement file: {meas_path}. Run B_generate_measurements.py first.")
+
+        truth = np.load(truth_path, allow_pickle=True)
+        meas = np.load(meas_path, allow_pickle=True)
+
+        t = np.asarray(truth["t"], dtype=float).reshape(-1)
+        dt = float(np.asarray(truth["dt"]).reshape(()))
+        x_true = np.asarray(truth["x_true"], dtype=float)
+        u_D = np.asarray(truth["u_D"], dtype=float).reshape(-1, 1)
+
+        y_meas = np.asarray(meas["y_meas"], dtype=float)
+        R = np.asarray(meas["R"], dtype=float)
+        meas_names = tuple(str(s) for s in meas["meas_names"].tolist())
+
+        if meas_names != ("B",):
+            raise ValueError(
+                f"This script expects B-only measurements => meas_names=('B',). Got meas_names={meas_names}"
+            )
+
+        T_steps = t.size
+        if x_true.shape != (T_steps, 6):
+            raise ValueError(f"x_true must be (T,6). Got {x_true.shape}")
+        if u_D.shape[0] != T_steps or y_meas.shape[0] != T_steps:
+            raise ValueError("Length mismatch among t, u_D, y_meas.")
+        if R.shape != (1, 1):
+            raise ValueError(f"B-only R must be (1,1). Got {R.shape}")
+
+        Q = _build_Q(dt=dt, q_scale=args.q_scale)
+
+        # Build filters
+        ekf = BdEKF(Q=Q, R=R, measurement_option=meas_opt)
+        ukf = BdUKF(Q=Q, R=R, measurement_option=meas_opt)
+
+        runs[motif] = {}
+
+        # Run EKF
+        seed_ekf = _case_seed(args.seed_init, motif, "EKF")
+        x_hat_ekf, P_hat_ekf = _run_filter(
+            filter_obj=ekf,
+            t=t,
+            dt=dt,
+            x_true=x_true,
+            u_D=u_D,
+            y_meas=y_meas,
+            seed_init=seed_ekf,
+            init_perturb_scale=args.init_perturb_scale,
+        )
+        runs[motif]["EKF"] = {"x_hat": x_hat_ekf, "P_hat": P_hat_ekf}
+
+        # Run UKF
+        seed_ukf = _case_seed(args.seed_init, motif, "UKF")
+        x_hat_ukf, P_hat_ukf = _run_filter(
+            filter_obj=ukf,
+            t=t,
+            dt=dt,
+            x_true=x_true,
+            u_D=u_D,
+            y_meas=y_meas,
+            seed_init=seed_ukf,
+            init_perturb_scale=args.init_perturb_scale,
+        )
+        runs[motif]["UKF"] = {"x_hat": x_hat_ukf, "P_hat": P_hat_ukf}
+
+        # Compute metrics (focus on Z since B is measured)
+        for filt_name, x_hat in [("EKF", x_hat_ekf), ("UKF", x_hat_ukf)]:
+            err = x_hat - x_true
+            rms_states = _rms(err, axis=0)
+            Z_rms = float(rms_states[0])
+
+            B_true = _B_from_x(x_true)
+            B_hat = _B_from_x(x_hat)
+            B_rms = float(_rms(B_hat - B_true))
+
+            summary_rows.append(
+                {
+                    "motif": motif,
+                    "filter": filt_name,
+                    "meas_opt": meas_opt,
+                    "RMS_Z": Z_rms,
+                    "RMS_B": B_rms,
+                    "seed_init": seed_ekf if filt_name == "EKF" else seed_ukf,
+                    "q_scale": float(args.q_scale),
+                    "init_perturb_scale": float(args.init_perturb_scale),
+                }
+            )
+
+        # Store shared arrays for saving
+        runs[motif]["_shared"] = {
+            "t": t,
+            "dt": np.array(dt),
+            "x_true": x_true,
+            "u_D": u_D,
+            "y_meas": y_meas,
+            "Q": Q,
+            "R": R,
+        }
+
+    # -----------------------------------------------------------------
+    # Save CSV metrics
+    # -----------------------------------------------------------------
+    csv_path = out_metrics / "bonly_crank_ekf_vs_ukf.csv"
+    header = ["motif", "filter", "meas_opt", "RMS_Z", "RMS_B", "seed_init", "q_scale", "init_perturb_scale"]
+    with open(csv_path, "w", encoding="utf-8") as f:
+        f.write(",".join(header) + "\n")
+        for r in summary_rows:
+            f.write(",".join(str(r[h]) for h in header) + "\n")
+
+    # -----------------------------------------------------------------
+    # Save NPZ bundle
+    # -----------------------------------------------------------------
+    npz_path = out_filters / "bonly_crank_ekf_vs_ukf.npz"
+    save_dict = {}
+    for motif in motifs:
+        shared = runs[motif]["_shared"]
+        save_dict[f"{motif}__t"] = shared["t"]
+        save_dict[f"{motif}__dt"] = shared["dt"]
+        save_dict[f"{motif}__x_true"] = shared["x_true"]
+        save_dict[f"{motif}__u_D"] = shared["u_D"]
+        save_dict[f"{motif}__y_meas"] = shared["y_meas"]
+        save_dict[f"{motif}__Q"] = shared["Q"]
+        save_dict[f"{motif}__R"] = shared["R"]
+
+        for filt_name in ("EKF", "UKF"):
+            save_dict[f"{motif}__{filt_name}__x_hat"] = runs[motif][filt_name]["x_hat"]
+            save_dict[f"{motif}__{filt_name}__P_hat"] = runs[motif][filt_name]["P_hat"]
+
+    np.savez(npz_path, **save_dict)
+
+    # -----------------------------------------------------------------
+    # Build figure (2 columns: motifs; row1: B true/hat; row2: Z error^2 and Pzz)
+    # -----------------------------------------------------------------
+    fig = plt.figure(figsize=(12, 8))
+
+    for col, motif in enumerate(motifs, start=1):
+        shared = runs[motif]["_shared"]
+        t = shared["t"]
+        x_true = shared["x_true"]
+        B_true = _B_from_x(x_true)
+        Z_true = x_true[:, 0]
+
+        # --- Row 1: B trajectory (measured) ---
+        ax1 = fig.add_subplot(2, 2, col)
+        ax1.plot(t, B_true, label="B true")
+        for filt_name in ("EKF", "UKF"):
+            x_hat = runs[motif][filt_name]["x_hat"]
+            B_hat = _B_from_x(x_hat)
+            ax1.plot(t, B_hat, label=f"B hat ({filt_name})")
+        ax1.set_title(f"{motif} (B-only): B true vs estimates")
+        ax1.set_xlabel("Time [h]")
+        ax1.set_ylabel("B")
+        ax1.grid(True)
+        ax1.legend()
+
+        # --- Row 2: Z squared error + filter Pzz (consistency diagnostic) ---
+        ax2 = fig.add_subplot(2, 2, col + 2)
+        for filt_name in ("EKF", "UKF"):
+            x_hat = runs[motif][filt_name]["x_hat"]
+            P_hat = runs[motif][filt_name]["P_hat"]
+
+            Z_hat = x_hat[:, 0]
+            e2 = (Z_hat - Z_true) ** 2
+            Pzz = P_hat[:, 0, 0]
+
+            ax2.plot(t, e2, label=f"(Z_hat - Z_true)^2 ({filt_name})", alpha=0.9)
+            ax2.plot(t, Pzz, label=f"Pzz ({filt_name})", linestyle="--", alpha=0.9)
+
+        ax2.set_title(f"{motif} (B-only): Z error^2 and Pzz")
+        ax2.set_xlabel("Time [h]")
+        ax2.set_ylabel("Variance proxy")
+        ax2.grid(True)
+        ax2.legend()
+
+    fig.tight_layout()
+    fig_path = out_figs / "bonly_crank_ekf_vs_ukf.png"
+    fig.savefig(fig_path, dpi=200)
+    plt.close(fig)
+
+    # -----------------------------------------------------------------
+    # Print topline summary + crank effect
+    # -----------------------------------------------------------------
+    def _get_rmsZ(m: str, f: str) -> float:
+        for r in summary_rows:
+            if r["motif"] == m and r["filter"] == f:
+                return float(r["RMS_Z"])
+        return float("nan")
+
+    ekf_a = _get_rmsZ(args.motif_a, "EKF")
+    ekf_b = _get_rmsZ(args.motif_b, "EKF")
+    ukf_a = _get_rmsZ(args.motif_a, "UKF")
+    ukf_b = _get_rmsZ(args.motif_b, "UKF")
+
+    print("=" * 80)
+    print("Saved:")
+    print(f"  Figure : {fig_path}")
+    print(f"  CSV    : {csv_path}")
+    print(f"  NPZ    : {npz_path}")
+    print("-" * 80)
+    print("RMS(Z) summary (lower is better):")
+    print(f"  EKF: {args.motif_a} -> {ekf_a:.6g} | {args.motif_b} -> {ekf_b:.6g}")
+    print(f"  UKF: {args.motif_a} -> {ukf_a:.6g} | {args.motif_b} -> {ukf_b:.6g}")
+
+    if np.isfinite(ekf_a) and np.isfinite(ekf_b) and ekf_a > 0:
+        print(f"  EKF crank improvement: {(ekf_a - ekf_b) / ekf_a * 100:.2f}%")
+    if np.isfinite(ukf_a) and np.isfinite(ukf_b) and ukf_a > 0:
+        print(f"  UKF crank improvement: {(ukf_a - ukf_b) / ukf_a * 100:.2f}%")
+
+    print("=" * 80)
+
+
+if __name__ == "__main__":
+    main()
