@@ -1,1 +1,15 @@
--r requirements_minimal.txt
+# -------------------------
+# Runtime dependencies
+# -------------------------
+numpy
+scipy
+matplotlib
+pandas
+tqdm
+
+# -------------------------
+# Development / QA tooling
+# -------------------------
+black
+ruff
+pytest
