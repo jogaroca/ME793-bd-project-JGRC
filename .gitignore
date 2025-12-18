@@ -14,7 +14,7 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Generated outputs (si luego generas resultados)
+# Generated outputs
 results/
 outputs/
 figures/
