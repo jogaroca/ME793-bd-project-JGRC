@@ -1,3 +1,2 @@
-black
-ruff
-pytest
+# Deprecated: use requirements.txt
+-r requirements.txt
