@@ -11,15 +11,22 @@ def get_version() -> str:
     return "0.0.0"
 
 
-def read_requirements(filename: str = "requirements_minimal.txt") -> list[str]:
+def read_requirements(filename: str = "requirements.txt") -> list[str]:
     req_path = os.path.join(os.path.dirname(__file__), filename)
     if not os.path.exists(req_path):
         return []
+
+    reqs: list[str] = []
     with open(req_path, "r", encoding="utf-8") as f:
-        return [
-            line.strip() for line in f
-            if line.strip() and not line.strip().startswith("#")
-        ]
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Defensive: setuptools no acepta flags tipo `-r ...` en install_requires
+            if line.startswith("-"):
+                continue
+            reqs.append(line)
+    return reqs
 
 
 setup(
