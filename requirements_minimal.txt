@@ -1,5 +1,2 @@
-numpy
-scipy
-matplotlib
-pandas
-tqdm
+# Deprecated: use requirements.txt
+-r requirements.txt
